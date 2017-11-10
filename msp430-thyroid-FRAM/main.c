@@ -20,6 +20,11 @@ struct fann *ann = NULL;
 #pragma PERSISTENT(i)
 uint16_t i = 0;
 
+#pragma PERSISTENT(clk_cycles)
+uint32_t clk_cycles = 0;
+
+#undef PROFILE
+
 /* Debug variable. */
 fann_type *calc_out;
 static char string[] =
@@ -38,6 +43,8 @@ int main(void)
     /* Prepare LED. */
     PM5CTL0 &= ~LOCKLPM5; // Disable the GPIO power-on default high-impedance mode
                           // to activate previously configured port settings
+//    P1DIR |= (BIT0 & BIT1);
+//    P1OUT &= ~(BIT0 & BIT1);
     P1DIR |= BIT0;
     P1OUT &= ~BIT0;
 
@@ -47,7 +54,6 @@ int main(void)
 //    CSCTL1 |= DCOFSEL_6;
 //    CSCTL3 &= ~(DIVS | DIVM);
 //    CSCTL4 &= ~SMCLKOFF;
-
     /**************   ************/
     FRCTL0 = FRCTLPW | NWAITS_1;
     // Clock System Setup
@@ -57,22 +63,18 @@ int main(void)
     CSCTL2 = SELA__VLOCLK | SELS__DCOCLK | SELM__DCOCLK;
     // Per Device Errata set divider to 4 before changing frequency to
     // prevent out of spec operation from overshoot transient
-    CSCTL3 = DIVA__4 | DIVS__4 | DIVM__4;   // Set all corresponding clk sources to divide by 4 for errata
+    CSCTL3 = DIVA__4 | DIVS__4 | DIVM__4; // Set all corresponding clk sources to divide by 4 for errata
     CSCTL1 = DCOFSEL_4 | DCORSEL;           // Set DCO to 16MHz
     // Delay by ~10us to let DCO settle. 60 cycles = 20 cycles buffer + (10us / (1/4MHz))
     __delay_cycles(60);
-    CSCTL3 = DIVA__1 | DIVS__1 | DIVM__1;   // Set all dividers to 1 for 16MHz operation
+    CSCTL3 = DIVA__1 | DIVS__1 | DIVM__1; // Set all dividers to 1 for 16MHz operation
     CSCTL0_H = 0;
     /**************  ************/
 
-
-
     /*Power load simulation*/
     /* You need to use these statements in the beginning your intermittent program*/
-    //tester_autoreset(0, noise_3, 0);
+//    tester_autoreset(0, noise_3, 0);
     tester_notify_start();
-
-    uint32_t clk_cycles = 0;
 
 #ifdef PROFILE
     /* Start counting clock cycles. */
@@ -94,9 +96,9 @@ int main(void)
 
     /* Print profiling. */
     printf("ANN initialisation:\n"
-           "-> execution cycles = %lu\n"
-           "-> execution time = %.3f ms\n\n",
-           clk_cycles, (float) clk_cycles / F_CONST);
+            "-> execution cycles = %lu\n"
+            "-> execution time = %.3f ms\n\n",
+            clk_cycles, (float) clk_cycles / F_CONST);
 #endif // PROFILE
 
     if (i == 0)
@@ -115,9 +117,12 @@ int main(void)
         calc_out = fann_test(ann, input[i], output[i]);
         i++;
 
-        if (i == num_data/2) {
+#ifdef PROFILE
+        if (i == num_data/2)
+        {
             __no_operation();
         }
+#endif
 
 #ifdef DEBUG
         /* Print results and errors (very expensive operations). */
@@ -144,21 +149,15 @@ int main(void)
 
     /* Print profiling. */
     printf("Run %u tests:\n"
-           "-> execution cycles = %lu (%lu per test)\n"
-           "-> execution time = %.3f ms (%.3f ms per test)\n\n",
-           i,
-           clk_cycles, clk_cycles / i,
-           (float) clk_cycles / F_CONST, (float) clk_cycles / F_CONST / i);
+            "-> execution cycles = %lu (%lu per test)\n"
+            "-> execution time = %.3f ms (%.3f ms per test)\n\n",
+            i,
+            clk_cycles, clk_cycles / i,
+            (float) clk_cycles / F_CONST, (float) clk_cycles / F_CONST / i);
 #endif // PROFILE
 
     /* Print error. */
     printf("MSE error on %d test data: %f\n\n", num_data, fann_get_MSE(ann));
-
-    // reset counter
-    i = 5;
-
-    /* Clean-up. */
-    fann_destroy(ann);
 
     __no_operation();
 
@@ -168,6 +167,21 @@ int main(void)
     /* Turn on LED: Use for debugging */
 
     P1OUT |= BIT0;
+    if (fann_get_MSE(ann) - 0.035 < 0.01)
+    {
+        _delay_cycles(8000000);
+        P1OUT &= ~BIT0;
+    }
+
+    // reset counter
+#ifdef PROFILE
+    i = 5;
+#else
+    i = 0;
+#endif
+
+    /* Clean-up. */
+    fann_destroy(ann);
 
     return 0;
 }
