@@ -16,6 +16,8 @@
 fann_type *calc_out;
 static char string[] = "Hello! Hello! Hello! Hello! Hello! Hello! Hello! Hello! \n";
 
+#define F_CONST 16000
+
 /**
  * main.c
  */
@@ -36,6 +38,25 @@ int main(void)
 //    CSCTL1 |= DCOFSEL_6;
 //    CSCTL3 &= ~(DIVS | DIVM);
 //    CSCTL4 &= ~SMCLKOFF;
+
+    /**************   ************/
+    FRCTL0 = FRCTLPW | NWAITS_1;
+    // Clock System Setup
+    CSCTL0_H = CSKEY_H;                     // Unlock CS registers
+    CSCTL1 = DCOFSEL_0;                     // Set DCO to 1MHz
+    // Set SMCLK = MCLK = DCO, ACLK = VLOCLK
+    CSCTL2 = SELA__VLOCLK | SELS__DCOCLK | SELM__DCOCLK;
+    // Per Device Errata set divider to 4 before changing frequency to
+    // prevent out of spec operation from overshoot transient
+    CSCTL3 = DIVA__4 | DIVS__4 | DIVM__4;   // Set all corresponding clk sources to divide by 4 for errata
+    CSCTL1 = DCOFSEL_4 | DCORSEL;           // Set DCO to 16MHz
+    // Delay by ~10us to let DCO settle. 60 cycles = 20 cycles buffer + (10us / (1/4MHz))
+    __delay_cycles(60);
+    CSCTL3 = DIVA__1 | DIVS__1 | DIVM__1;   // Set all dividers to 1 for 16MHz operation
+    CSCTL0_H = 0;
+    /**************  ************/
+
+
 
     /*Power load simulation*/
     /* You need to use these statements in the beginning your intermittent program*/
@@ -67,7 +88,7 @@ int main(void)
     printf("ANN initialisation:\n"
            "-> execution cycles = %lu\n"
            "-> execution time = %.3f ms\n\n",
-           clk_cycles, (float) clk_cycles / 8000);
+           clk_cycles, (float) clk_cycles / F_CONST);
 #endif // PROFILE
 
     /* Reset Mean Square Error. */
@@ -110,7 +131,7 @@ int main(void)
            "-> execution time = %.3f ms (%.3f ms per test)\n\n",
            i,
            clk_cycles, clk_cycles / i,
-           (float) clk_cycles / 8000, (float) clk_cycles / 8000 / i);
+           (float) clk_cycles / F_CONST, (float) clk_cycles / F_CONST / i);
 #endif // PROFILE
 
 #ifdef DEBUG
